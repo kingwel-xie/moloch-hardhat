@@ -18,20 +18,28 @@ const MATIC_PRIVATE_KEY = "fac50ba7eb2bcbf8c80abd07732abee20d8b0d30a4099cfe065e0
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
+  defaultNetwork: 'localhost',
   solidity: {
-    version: "0.5.17",
+    version:  "0.8.4",
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200
+        runs: 2000,
+        details: {
+          yul: true,
+          yulDetails: {
+            stackAllocation: true,
+            optimizerSteps: "dhfoDgvulfnTUtnIf"
+          }
+        }
       }
-    }
+    },
   },
   networks: {
     localhost: {
       deployedContracts: {
-        moloch: '0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E',
-        pool: '0x95401dc811bb5740090279Ba06cfA8fcF6113778',
+        moloch: '0xfaAddC93baf78e89DCf37bA67943E1bE8F37Bb8c',
+        pool: '0x276C216D241856199A83bf27b2286659e5b877D3',
       }
     },
     ropsten: {

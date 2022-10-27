@@ -1,13 +1,14 @@
+// SPDX-License-Identifier: MIT
 // Pool.sol
 // - mints a pool share when someone donates tokens
 // - syncs with Moloch proposal queue to mint shares for grantees
 // - allows donors to withdraw tokens at any time
 
-pragma solidity ^0.5.3;
+pragma solidity ^0.8.3;
 
 import "./Moloch.sol";
-import "./oz/SafeMath.sol";
-import "./oz/IERC20.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract MolochPool {
     using SafeMath for uint256;
@@ -85,7 +86,7 @@ contract MolochPool {
         locked = false;
     }
 
-    constructor(address _moloch) public {
+    constructor(address _moloch) {
         moloch = Moloch(_moloch);
         approvedToken = IERC20(moloch.approvedToken());
     }
@@ -117,9 +118,7 @@ contract MolochPool {
         // declare proposal params
         address applicant;
         uint256 sharesRequested;
-        bool processed;
-        bool didPass;
-        bool aborted;
+        Moloch.ProposalResult memory result;
         uint256 tokenTribute;
         uint256 maxTotalSharesAtYesVote;
 
@@ -127,12 +126,12 @@ contract MolochPool {
 
         while (i < toIndex) {
 
-            (, applicant, sharesRequested, , , , processed, didPass, aborted, tokenTribute, , maxTotalSharesAtYesVote) = moloch.proposalQueue(i);
+            (, applicant, sharesRequested, , result, tokenTribute, , maxTotalSharesAtYesVote) = moloch.proposalQueue(i);
 
-            if (!processed) { break; }
+            if (!result.processed) { break; }
 
             // passing grant proposal, mint pool shares proportionally on behalf of the applicant
-            if (!aborted && didPass && tokenTribute == 0 && sharesRequested > 0) {
+            if (!result.aborted && result.didPass && tokenTribute == 0 && sharesRequested > 0) {
                 // This can't revert:
                 //   1. maxTotalSharesAtYesVote > 0, otherwise nobody could have voted.
                 //   2. sharesRequested is <= 10**18 (see Moloch.sol:172), and

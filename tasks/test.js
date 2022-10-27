@@ -30,7 +30,23 @@ task('recharge', 'transfer some tokens to sender1')
       return
     }
 
+    let transferEvent = new Promise((resolve, reject) => {
+      token.on('Transfer', (from, to, amount) => {
+
+        resolve({
+          from: from,
+          to: to,
+          amount: amount
+        });
+      });
+
+      setTimeout(() => {
+        reject(new Error('timeout'));
+      }, 60000)
+    });
+
     const [sender, sender1] = await hre.ethers.getSigners();
+
 
     console.log(
       "Transferring from account:",
@@ -42,7 +58,8 @@ task('recharge', 'transfer some tokens to sender1')
 
     await token.transfer(sender1.address, tokens)
 
-    console.log('... done!')
+    let event = await transferEvent;
+    console.log('transfer... done!', event)
     console.log("Sender token balance:", (await token.balanceOf(sender.address)).toString());
     console.log("Sender1 token balance:", (await token.balanceOf(sender1.address)).toString());
 
@@ -50,7 +67,6 @@ task('recharge', 'transfer some tokens to sender1')
     if (IERC20 === undefined) {
       return
     }
-
     const molochAddress = getMolochAddress()
     if (!molochAddress) {
       console.error(`Please, set the moloch DAO's address in config`)
@@ -59,8 +75,23 @@ task('recharge', 'transfer some tokens to sender1')
 
     await IERC20.approve(molochAddress, tokens)
 
-    // await IERC20.transfer(sender.address, BigNumber.from(tokens).div(2))
-    // console.log("Sender token balance:", (await IERC20.balanceOf(sender.address)).toString());
-    // console.log("Sender1 token balance:", (await IERC20.balanceOf(sender1.address)).toString());
+    const rrr = await new Promise((resolve, reject) => {
+      token.on('Approval', (owner, spender, amount) => {
+
+        resolve({
+          owner: owner,
+          spender: spender,
+          amount: amount
+        });
+      });
+
+      setTimeout(() => {
+        reject(new Error('timeout'));
+      }, 60000)
+    });
+
+    console.log(rrr)
+
+    token.removeAllListeners()
   })
 

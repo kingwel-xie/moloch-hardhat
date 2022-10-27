@@ -1,8 +1,9 @@
-pragma solidity ^0.5.3;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.3;
 
-import "./oz/SafeMath.sol";
-import "./oz/IERC20.sol";
 import "./GuildBank.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract Moloch {
     using SafeMath for uint256;
@@ -60,16 +61,20 @@ contract Moloch {
         uint256 highestIndexYesVote; // highest proposal index # on which the member voted YES
     }
 
-    struct Proposal {
-        address proposer; // the member who submitted the proposal
-        address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
-        uint256 sharesRequested; // the # of shares the applicant is requesting
-        uint256 startingPeriod; // the period in which voting can start for this proposal
+    struct ProposalResult {
         uint256 yesVotes; // the total number of YES votes for this proposal
         uint256 noVotes; // the total number of NO votes for this proposal
         bool processed; // true only if the proposal has been processed
         bool didPass; // true only if the proposal passed
         bool aborted; // true only if applicant calls "abort" fn before end of voting period
+    }
+
+    struct Proposal {
+        address proposer; // the member who submitted the proposal
+        address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
+        uint256 sharesRequested; // the # of shares the applicant is requesting
+        uint256 startingPeriod; // the period in which voting can start for this proposal
+        ProposalResult result;
         uint256 tokenTribute; // amount of tokens offered as tribute
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
         uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
@@ -106,7 +111,7 @@ contract Moloch {
         uint256 _proposalDeposit,
         uint256 _dilutionBound,
         uint256 _processingReward
-    ) public {
+    ) {
         require(summoner != address(0), "Moloch::constructor - summoner cannot be 0");
         require(_approvedToken != address(0), "Moloch::constructor - _approvedToken cannot be 0");
         require(_periodDuration > 0, "Moloch::constructor - _periodDuration cannot be 0");
@@ -131,7 +136,7 @@ contract Moloch {
         dilutionBound = _dilutionBound;
         processingReward = _processingReward;
 
-        summoningTime = now;
+        summoningTime = block.timestamp;
 
         members[summoner] = Member(summoner, 1, true, 0);
         memberAddressByDelegateKey[summoner] = summoner;
@@ -178,23 +183,34 @@ contract Moloch {
         ).add(1);
 
         // create proposal ...
-        Proposal memory proposal = Proposal({
-            proposer: memberAddress,
-            applicant: applicant,
-            sharesRequested: sharesRequested,
-            startingPeriod: startingPeriod,
-            yesVotes: 0,
-            noVotes: 0,
-            processed: false,
-            didPass: false,
-            aborted: false,
-            tokenTribute: tokenTribute,
-            details: details,
-            maxTotalSharesAtYesVote: 0
-        });
+//        Proposal memory proposal = Proposal({
+//            proposer: memberAddress,
+//            applicant: applicant,
+//            sharesRequested: sharesRequested,
+//            startingPeriod: startingPeriod,
+//            yesVotes: 0,
+//            noVotes: 0,
+//            processed: false,
+//            didPass: false,
+//            aborted: false,
+//            tokenTribute: tokenTribute,
+//            details: details,
+//            maxTotalSharesAtYesVote: 0
+//        });
 
         // ... and append it to the queue
-        proposalQueue.push(proposal);
+        Proposal storage p = proposalQueue.push();
+        p.proposer = memberAddress;
+        p.applicant = applicant;
+        p.sharesRequested = sharesRequested;
+        p.startingPeriod = startingPeriod;
+        p.result.yesVotes = 0;
+        p.result.noVotes = 0;
+        p.result.processed = false;
+        p.result.didPass = false;
+        p.tokenTribute = tokenTribute;
+        p.details = details;
+        p.maxTotalSharesAtYesVote = 0;
 
         uint256 proposalIndex = proposalQueue.length.sub(1);
         emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
@@ -215,14 +231,14 @@ contract Moloch {
         require(!hasVotingPeriodExpired(proposal.startingPeriod), "Moloch::submitVote - proposal voting period has expired");
         require(proposal.votesByMember[memberAddress] == Vote.Null, "Moloch::submitVote - member has already voted on this proposal");
         require(vote == Vote.Yes || vote == Vote.No, "Moloch::submitVote - vote must be either Yes or No");
-        require(!proposal.aborted, "Moloch::submitVote - proposal has been aborted");
+        require(!proposal.result.aborted, "Moloch::submitVote - proposal has been aborted");
 
         // store vote
         proposal.votesByMember[memberAddress] = vote;
 
         // count vote
         if (vote == Vote.Yes) {
-            proposal.yesVotes = proposal.yesVotes.add(member.shares);
+            proposal.result.yesVotes = proposal.result.yesVotes.add(member.shares);
 
             // set highest index (latest) yes vote - must be processed for member to ragequit
             if (proposalIndex > member.highestIndexYesVote) {
@@ -235,7 +251,7 @@ contract Moloch {
             }
 
         } else if (vote == Vote.No) {
-            proposal.noVotes = proposal.noVotes.add(member.shares);
+            proposal.result.noVotes = proposal.result.noVotes.add(member.shares);
         }
 
         emit SubmitVote(proposalIndex, msg.sender, memberAddress, uintVote);
@@ -246,13 +262,13 @@ contract Moloch {
         Proposal storage proposal = proposalQueue[proposalIndex];
 
         require(getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength), "Moloch::processProposal - proposal is not ready to be processed");
-        require(proposal.processed == false, "Moloch::processProposal - proposal has already been processed");
-        require(proposalIndex == 0 || proposalQueue[proposalIndex.sub(1)].processed, "Moloch::processProposal - previous proposal must be processed");
+        require(proposal.result.processed == false, "Moloch::processProposal - proposal has already been processed");
+        require(proposalIndex == 0 || proposalQueue[proposalIndex.sub(1)].result.processed, "Moloch::processProposal - previous proposal must be processed");
 
-        proposal.processed = true;
+        proposal.result.processed = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
 
-        bool didPass = proposal.yesVotes > proposal.noVotes;
+        bool didPass = proposal.result.yesVotes > proposal.result.noVotes;
 
         // Make the proposal fail if the dilutionBound is exceeded
         if (totalShares.mul(dilutionBound) < proposal.maxTotalSharesAtYesVote) {
@@ -260,9 +276,9 @@ contract Moloch {
         }
 
         // PROPOSAL PASSED
-        if (didPass && !proposal.aborted) {
+        if (didPass && !proposal.result.aborted) {
 
-            proposal.didPass = true;
+            proposal.result.didPass = true;
 
             // if the applicant is already a member, add to their existing shares
             if (members[proposal.applicant].exists) {
@@ -350,11 +366,11 @@ contract Moloch {
 
         require(msg.sender == proposal.applicant, "Moloch::abort - msg.sender must be applicant");
         require(getCurrentPeriod() < proposal.startingPeriod.add(abortWindow), "Moloch::abort - abort window must not have passed");
-        require(!proposal.aborted, "Moloch::abort - proposal must not have already been aborted");
+        require(!proposal.result.aborted, "Moloch::abort - proposal must not have already been aborted");
 
         uint256 tokensToAbort = proposal.tokenTribute;
         proposal.tokenTribute = 0;
-        proposal.aborted = true;
+        proposal.result.aborted = true;
 
         // return all tokens to the applicant
         require(
@@ -391,7 +407,7 @@ contract Moloch {
     }
 
     function getCurrentPeriod() public view returns (uint256) {
-        return now.sub(summoningTime).div(periodDuration);
+        return block.timestamp.sub(summoningTime).div(periodDuration);
     }
 
     function getProposalQueueLength() public view returns (uint256) {
@@ -401,7 +417,7 @@ contract Moloch {
     // can only ragequit if the latest proposal you voted YES on has been processed
     function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
         require(highestIndexYesVote < proposalQueue.length, "Moloch::canRagequit - proposal does not exist");
-        return proposalQueue[highestIndexYesVote].processed;
+        return proposalQueue[highestIndexYesVote].result.processed;
     }
 
     function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
