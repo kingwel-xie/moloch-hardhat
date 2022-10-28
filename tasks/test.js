@@ -1,5 +1,6 @@
 const {getApprovedToken, getMolochAddress} = require("../scripts/utils");
 const {BigNumber} = require("ethers");
+const { expect } = require("chai");
 
 task('test-task', 'test task system')
   .setAction(async () => {
@@ -73,24 +74,26 @@ task('recharge', 'transfer some tokens to sender1')
       return
     }
 
-    await IERC20.approve(molochAddress, tokens)
+    // await IERC20.approve(molochAddress, tokens)
 
-    const rrr = await new Promise((resolve, reject) => {
-      token.on('Approval', (owner, spender, amount) => {
+    await expect(IERC20.approve(molochAddress, tokens)).to.emit(token, "Approval")
 
-        resolve({
-          owner: owner,
-          spender: spender,
-          amount: amount
-        });
-      });
-
-      setTimeout(() => {
-        reject(new Error('timeout'));
-      }, 60000)
-    });
-
-    console.log(rrr)
+    // const rrr = await new Promise((resolve, reject) => {
+    //   token.on('Approval', (owner, spender, amount) => {
+    //
+    //     resolve({
+    //       owner: owner,
+    //       spender: spender,
+    //       amount: amount
+    //     });
+    //   });
+    //
+    //   setTimeout(() => {
+    //     reject(new Error('timeout'));
+    //   }, 60000)
+    // });
+    //
+    // console.log(rrr)
 
     token.removeAllListeners()
   })

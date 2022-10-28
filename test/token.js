@@ -7,7 +7,7 @@ describe("Token contract", function() {
 
     const Token = await ethers.getContractFactory("Token");
 
-    const hardhatToken = await Token.deploy();
+    const hardhatToken = await Token.deploy(1000000);
 
 	console.log("Token address:", hardhatToken.address);
 
